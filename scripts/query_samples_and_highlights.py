@@ -12,6 +12,14 @@ def normalize_sample(value):
     return text if text else None
 
 
+def normalize_sample(value):
+    """标准化样本值，去除空白并统一字符串格式。"""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
 def read_samples(txt_file):
     """从txt文件中读取样本，每行一个样本。"""
     try:
