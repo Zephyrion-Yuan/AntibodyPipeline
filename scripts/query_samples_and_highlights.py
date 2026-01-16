@@ -32,23 +32,35 @@ def select_files():
         
     return txt_file, xlsx_file
 
+def normalize_sample(value):
+    """标准化样本值，去除空白并统一字符串格式。"""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
 def read_samples(txt_file):
-    """从txt文件中读取样本，每行一个样本"""
+    """从txt文件中读取样本，每行一个样本。"""
     try:
         with open(txt_file, 'r', encoding='utf-8') as f:
-            # 读取所有行并去除空白和空行
-            samples = [line.strip() for line in f if line.strip()]
+            # 使用集合去重并加速后续匹配
+            samples = {
+                normalized
+                for line in f
+                if (normalized := normalize_sample(line))
+            }
         return samples
     except Exception as e:
         messagebox.showerror("错误", f"读取TXT文件时出错: {str(e)}")
         return None
 
 def highlight_matches(xlsx_file, samples):
-    """在xlsx文件中高亮匹配的样本"""
+    """在xlsx文件中高亮匹配的样本。"""
     try:
         # 加载工作簿
         wb = load_workbook(xlsx_file)
-        
+
         # 创建黄色填充样式
         yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         
@@ -56,13 +68,13 @@ def highlight_matches(xlsx_file, samples):
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             print(f"正在处理工作表: {sheet_name}")
-            
-            # 遍历所有单元格
+
+            # 遍历所有单元格，使用集合加速匹配
             for row in sheet.iter_rows():
                 for cell in row:
-                    # 检查单元格值是否在样本列表中
-                    if cell.value and str(cell.value).strip() in samples:
-                        print(cell.value)
+                    cell_value = normalize_sample(cell.value)
+                    if cell_value and cell_value in samples:
+                        print(cell_value)
                         cell.fill = yellow_fill
         
         # 生成输出文件名和路径
@@ -92,7 +104,7 @@ def main():
     if not samples:
         messagebox.showwarning("警告", "未从TXT文件中读取到任何样本")
         return
-        
+
     print(f"已读取 {len(samples)} 个样本")
     
     # 高亮匹配
