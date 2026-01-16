@@ -2,9 +2,7 @@ import pandas as pd
 from collections import defaultdict
 from dnachisel import *
 # from dnachisel.builtin_specifications import load_codon_table
-import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog, messagebox
+from core.ui_inputs import UIContext
 import json
 from pathlib import Path
 import configparser
@@ -518,282 +516,77 @@ def process_excel_advanced(
         )
 
         prog.close()
-        messagebox.showinfo("完成", result_msg, parent=parent)
+        print(result_msg)
 
     except Exception as e:
         prog.close()
-        messagebox.showerror("错误", f"处理过程中出现问题：\n{e}", parent=parent)
-        raise
+        raise ValueError(f"处理过程中出现问题：\n{e}") from e
 
 
 class ProgressDialog:
-    """简单的进度条窗口：调用 update(step, message) 实时刷新；close() 关闭。"""
+    """控制台进度提示。"""
+
     def __init__(self, parent=None, title="正在处理...", maximum=100):
-        # 1) 确保有一个 root（有些环境下第一次创建的是 Toplevel，会没有默认 root）
-        if tk._default_root is None:
-            _root = tk.Tk()
-            _root.withdraw()
-
-        self.parent = parent if parent is not None else tk._default_root
-        self.top = tk.Toplevel(self.parent)
-        self.top.title(title)
-        self.top.resizable(False, False)
-
-        # 2) 只有当父窗口是可见的，才设置 transient；否则不要设置（避免一起被隐藏）
-        try:
-            if self.parent is not None and self.parent.winfo_exists() and self.parent.winfo_viewable():
-                self.top.transient(self.parent)
-        except Exception:
-            pass
-
-        # 3) 置顶 + 立即刷新，让窗口马上出现到前台
-        try:
-            self.top.attributes('-topmost', True)
-        except Exception:
-            pass
-
-        # 居中显示（简易）
-        self.top.update_idletasks()
-        w = 420
-        h = 120
-        x = (self.top.winfo_screenwidth() - w) // 2
-        y = (self.top.winfo_screenheight() - h) // 3
-        self.top.geometry(f"{w}x{h}+{x}+{y}")
-
-        frm = tk.Frame(self.top, padx=16, pady=16)
-        frm.pack(fill="both", expand=True)
-
-        self.msg_var = tk.StringVar(value="准备中…")
-        tk.Label(frm, textvariable=self.msg_var, anchor="w").pack(fill="x", pady=(0, 8))
-
-        from tkinter import ttk
-        self.progress_var = tk.IntVar(value=0)
-        self.progress = ttk.Progressbar(
-            frm, orient="horizontal", mode="determinate",
-            maximum=maximum, variable=self.progress_var, length=360
-        )
-        self.progress.pack(fill="x")
-
-        self.percent_var = tk.StringVar(value="0%")
-        tk.Label(frm, textvariable=self.percent_var, anchor="e", fg="#666").pack(fill="x", pady=(6, 0))
-
         self.maximum = maximum
-
-        # 4) 立刻绘制并前置一次，然后撤销永久置顶，避免遮挡后续弹窗
-        try:
-            self.top.update()   # 关键：创建后马上绘制
-            self.top.lift()
-            self.top.focus_force()
-            # 稍后关闭置顶属性（不影响首次拉起）
-            self.top.after(300, lambda: self._unset_topmost_safe())
-        except Exception:
-            pass
-
-    def _unset_topmost_safe(self):
-        try:
-            self.top.attributes('-topmost', False)
-        except Exception:
-            pass
+        self.title = title
+        self.current = 0
+        print(title)
 
     def set_max(self, maximum):
         self.maximum = maximum
-        self.progress.config(maximum=maximum)
-        self._refresh()
 
     def update(self, value, message=None):
-        if message is not None:
-            self.msg_var.set(message)
-        self.progress_var.set(int(value))
-        pct = 0 if self.maximum == 0 else int(value * 100 / self.maximum)
-        self.percent_var.set(f"{pct}%")
-        self._refresh()
+        self.current = value
+        if message:
+            print(message)
 
     def _refresh(self):
-        try:
-            self.top.update_idletasks()
-            self.top.update()
-        except Exception:
-            pass
-        try:
-            if self.parent:
-                self.parent.update_idletasks()
-        except Exception:
-            pass
+        return None
 
     def close(self):
-        try:
-            self.top.destroy()
-        except Exception:
-            pass
+        return None
 
 
 
 def get_inputs():
-    result = {}
+    ui = UIContext.from_env()
     config_path = "config/hr_arms.ini"
     defaults = load_defaults(config_path)
 
-    def choose_file(var):
-        path = filedialog.askopenfilename(parent=root)
-        if path:
-            var.set(path)
+    in_path = ui.require_input("input_file")
+    h_f = ui.optional_param("h_f", defaults.get("IgG1/4 HC-F", ""))
+    h_r = ui.optional_param("h_r", defaults.get("IgG1 HC-R", defaults.get("IgG4 HC-R", "")))
+    l_f = ui.optional_param("l_f", defaults.get("kappa LC-F", defaults.get("lambda LC-F", "")))
+    l_r = ui.optional_param("l_r", defaults.get("kappa LC-R", defaults.get("lambda LC-R", "")))
+    cell_line = ui.optional_param("cell_line", "CHO")
 
-    def on_ok():
-        in_path = path_var.get().strip()
-        if not in_path:
-            messagebox.showerror("错误", "必须选择输入文件！", parent=root)
-            return
+    if not h_f or not h_r or not l_f or not l_r:
+        ui.error("同源臂参数不完整，请在前端填写 h_f/h_r/l_f/l_r。")
 
-        # 收集输入
-        inputs = {}
-        for key, (var, seq_var, cb) in seq_widgets.items():
-            if var.get() == 1:  # 选中
-                inputs[key] = seq_var.get().strip()
+    save_defaults(defaults, config_path=config_path)
 
-        # 检查必填项
-        try:
-            h_f = inputs['IgG1/4 HC-F']
-        except KeyError:
-            messagebox.showerror("错误", "IgG1/4 HC-F 必须勾选！", parent=root)
-            return
-
-        # HC-R 必须二选一
-        h_r = ""
-        if 'IgG4 HC-R' in inputs and 'IgG1 HC-R' in inputs:
-            messagebox.showerror("错误", "HC-R 只能选择一个！", parent=root)
-            return
-        elif 'IgG4 HC-R' in inputs:
-            h_r = inputs['IgG4 HC-R']
-        elif 'IgG1 HC-R' in inputs:
-            h_r = inputs['IgG1 HC-R']
-        else:
-            messagebox.showerror("错误", "必须选择一个 HC-R！", parent=root)
-            return
-        
-        # LC-F 必须二选一
-        l_f = ""
-        if 'kappa LC-F' in inputs and 'lambda LC-F' in inputs:
-            messagebox.showerror("错误", "LC-F 只能选择一个！", parent=root)
-            return
-        elif 'kappa LC-F' in inputs:
-            l_f = inputs['kappa LC-F']
-        elif 'lambda LC-F' in inputs:
-            l_f = inputs['lambda LC-F']
-        else:
-            messagebox.showerror("错误", "必须选择一个 LC-F！", parent=root)
-            return
-        
-        # LC-R 必须二选一
-        l_r = ""
-        if 'kappa LC-R' in inputs and 'lambda LC-F' in inputs:
-            messagebox.showerror("错误", "LC-R 只能选择一个！", parent=root)
-            return
-        elif 'kappa LC-R' in inputs:
-            l_r = inputs['kappa LC-R']
-        elif 'lambda LC-R' in inputs:
-            l_r = inputs['lambda LC-R']
-        else:
-            messagebox.showerror("错误", "必须选择一个 LC-R！", parent=root)
-            return
-
-        nonlocal result
-        result = {
-            "in_path": in_path,
-            "h_f": h_f,
-            "h_r": h_r,
-            "l_f": l_f,
-            "l_r": l_r,
-            "parent": root,
-            "cell_line": cell_line_var.get(),
-        }
-
-        # 保存 defaults（保存全部序列，不管是否勾选）
-        save_defaults({k: v[1].get().strip() for k, v in seq_widgets.items()}, config_path=config_path)
-
-        root.withdraw()
-        root.quit()
-
-    def on_cancel():
-        root.destroy()
-        return
-
-    root = tk.Toplevel()
-    root.title("输入参数")
-    root.resizable(False, False)
-
-    frm = tk.Frame(root)
-    frm.pack(padx=16, pady=16)
-
-    tk.Label(frm, text="输入表：名称-重链序列-轻链序列.xlsx", fg="#175CA4",
-             font=("微软雅黑", 11, "bold")).pack(pady=(16, 2))
-    tk.Label(frm, text="样本名重/轻链命名格式为：name-H/L",
-             fg="#5b5b5b", font=("微软雅黑", 10)).pack(pady=(0, 10))
-
-    # 路径输入
-    path_var = tk.StringVar()
-    row = tk.Frame(frm)
-    row.pack(fill='x', pady=3)
-    tk.Label(row, text="输入文件", width=13, anchor='e').pack(side='left')
-    entry = tk.Entry(row, textvariable=path_var, width=40)
-    entry.pack(side='left', padx=5)
-    btn = tk.Button(row, text="选择", command=lambda v=path_var: choose_file(v))
-    btn.pack(side='left')
-
-    # 序列输入区
-    seq_widgets = {}
-    default_checks = {
-        'IgG1/4 HC-F': 1,
-        'IgG4 HC-R': 0,
-        'IgG1 HC-R': 0,
-        'kappa LC-F': 1,
-        'kappa LC-R': 1,
-        'lambda LC-F': 0,
-        'lambda LC-R': 0
+    return {
+        "in_path": in_path,
+        "h_f": h_f,
+        "h_r": h_r,
+        "l_f": l_f,
+        "l_r": l_r,
+        "parent": None,
+        "cell_line": cell_line,
     }
-
-    for key in ['IgG1/4 HC-F', 'IgG4 HC-R', 'IgG1 HC-R', 'kappa LC-F', 'kappa LC-R', 'lambda LC-F', 'lambda LC-R']:
-        row = tk.Frame(frm)
-        row.pack(fill='x', pady=2)
-
-        var = tk.IntVar(value=default_checks[key])
-        cb = tk.Checkbutton(row, variable=var)
-        cb.pack(side='left')
-
-        lbl = tk.Label(row, text=key + ":", width=13, anchor='e')
-        lbl.pack(side='left')
-
-        seq_var = tk.StringVar(value=defaults[key])
-        entry = tk.Entry(row, textvariable=seq_var, width=40, justify='left')
-        entry.icursor('end')
-        entry.pack(side='left', padx=5)
-
-        seq_widgets[key] = (var, seq_var, cb)
-
-    # 单选框区域
-    cell_line_var = tk.StringVar(value="human")
-    row = tk.Frame(frm)
-    row.pack(fill='x', pady=8)
-    tk.Label(row, text="细胞类型:", width=13, anchor='e').pack(side='left')
-    rb1 = tk.Radiobutton(row, text="CHO", variable=cell_line_var, value="CHO")
-    rb2 = tk.Radiobutton(row, text="HEK293", variable=cell_line_var, value="human")
-    rb1.pack(side='left', padx=5)
-    rb2.pack(side='left', padx=5)
-
-    # 按钮
-    btns = tk.Frame(frm)
-    btns.pack(pady=(16, 0))
-    tk.Button(btns, text="确定", command=on_ok, width=12).pack(side='left', padx=8)
-    tk.Button(btns, text="取消", command=on_cancel, width=12).pack(side='left', padx=8)
-
-    root.mainloop()
-    return result
-
 
 # 示例用法
 def main():
     inputs = get_inputs()
-    process_excel_advanced(inputs['in_path'], inputs['h_f'], inputs['h_r'], inputs['l_f'], inputs['l_r'], organism=inputs['cell_line'], parent=inputs['parent'])
-    inputs['parent'].destroy()
+    process_excel_advanced(
+        inputs['in_path'],
+        inputs['h_f'],
+        inputs['h_r'],
+        inputs['l_f'],
+        inputs['l_r'],
+        organism=inputs['cell_line'],
+        parent=inputs['parent'],
+    )
 
     return
 

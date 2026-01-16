@@ -2,8 +2,7 @@ from core.struc_plates_96 import PlateWorkbook, PlateSheet
 
 import pandas as pd
 import re
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from core.ui_inputs import UIContext
 import os
 
 
@@ -98,7 +97,7 @@ def merge_h_l_output(plates_path, conc_path, pair_path):
                 break
     
     if len(merged_records) == 0:
-        messagebox.showinfo("提示", "没有找到配对！")
+        print("没有找到配对！")
         return
 
 
@@ -260,75 +259,13 @@ def save_quarter_sheets_to_excel(out_plates, output_path):
 
 
 def get_user_inputs():
-
-    # 回传结果
-    result = {}
-
-    def choose_file(var):
-        path = filedialog.askopenfilename()
-        if path:
-            var.set(path)
-
-    def on_ok():
-        # 检查路径
-        paths = []
-        for var in path_vars:
-            value = var.get().strip()
-            if not value:
-                messagebox.showerror("错误", "所有路径不能为空")
-                return
-            paths.append(value)
-
-        # 返回数据
-        nonlocal result
-        result = {
-            "plates_path": paths[0],
-            "conc_path": paths[1],
-            "pair_path": paths[2],
-            "parent": root,
-        }
-        root.withdraw()
-        root.quit()
-
-    def on_cancel():
-        root.destroy()
-        return
-
-    root = tk.Toplevel()
-    root.title("输入参数")
-    root.resizable(False, False)
-
-    # 设置为顶层窗口并获得焦点
-    root.transient(root.master)
-    root.grab_set()
-
-    frm = tk.Frame(root)
-    frm.pack(padx=16, pady=16)
-
-    # 路径输入
-    path_labels = ["布局表", "浓度表", "配对表"]
-    path_vars = [tk.StringVar() for _ in range(3)]
-    for i, label in enumerate(path_labels):
-        row = tk.Frame(frm)
-        row.pack(fill='x', pady=3)
-        tk.Label(row, text=label, width=13, anchor='e').pack(side='left')
-        entry = tk.Entry(row, textvariable=path_vars[i], width=40)
-        entry.pack(side='left', padx=5)
-        btn = tk.Button(row, text="选择", command=lambda v=path_vars[i]: choose_file(v))
-        btn.pack(side='left')
-
-    row = tk.Frame(frm)
-    row.pack(fill='x', pady=8)
-
-    # 按钮
-    btns = tk.Frame(frm)
-    btns.pack(pady=(16,0))
-    tk.Button(btns, text="确定", command=on_ok, width=12).pack(side='left', padx=8)
-    tk.Button(btns, text="取消", command=on_cancel, width=12).pack(side='left', padx=8)
-
-    root.mainloop()
-    return result
-
+    ui = UIContext.from_env()
+    return {
+        "plates_path": ui.require_input("plates_file"),
+        "conc_path": ui.require_input("conc_file"),
+        "pair_path": ui.require_input("pair_file"),
+        "parent": None,
+    }
 
 def main():
 
@@ -354,8 +291,7 @@ def main():
         f"转染细胞布局: cell_plates.xlsx \n"
     )
 
-    messagebox.showinfo("完成", result_msg, parent=inputs['parent'])
-    inputs['parent'].destroy()
+    print(result_msg)
     
     return
 
