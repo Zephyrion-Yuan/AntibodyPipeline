@@ -2,8 +2,7 @@ from core.struc_plates_96 import PlateWorkbook
 
 import pandas as pd
 import re
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from core.ui_inputs import UIContext
 import os
 from typing import Tuple
 from openpyxl import load_workbook
@@ -148,14 +147,11 @@ def calculate_conc_arm(plate_path: str, conc_path: str, des_conc:float, volume:f
         wbs.save(output_file)
 
     if warn_high and warn_low:
-        messagebox.showinfo("警告", "存在样本浓度过高和过低，请调整", parent=parent)
-        sys.exit(1)
+        raise ValueError("存在样本浓度过高和过低，请调整")
     elif warn_high:
-        messagebox.showinfo("警告", "存在样本浓度过高，请调整", parent=parent)
-        sys.exit(1)
+        raise ValueError("存在样本浓度过高，请调整")
     elif warn_low:
-        messagebox.showinfo("警告", "存在样本浓度过低，请检查", parent=parent)
-        sys.exit(1)
+        raise ValueError("存在样本浓度过低，请检查")
     
     return wb, output_frame
 
@@ -173,8 +169,7 @@ def output_worklist(path, frame, bi_dict):
         duplicate_values_str = '\n - '.join(map(str, duplicate_values))
         # 抛出异常并退出
         error_msg = f"检测到Arm列存在重复值！重复值为: \n - {duplicate_values_str}"
-        messagebox.showerror("错误", error_msg)
-        raise ValueError("样本出现重复")
+        raise ValueError(error_msg)
 
     columns = [
         "Source_label", "Source_position", "Destination_position", "Destination_label",  "Volume", "Arm"
@@ -212,113 +207,14 @@ def output_worklist(path, frame, bi_dict):
 
 
 def get_user_inputs():
-
-    # 回传结果
-    result = {}
-
-    def choose_file(var):
-        path = filedialog.askopenfilename()
-        if path:
-            var.set(path)
-
-    def on_ok():
-        # 检查路径
-        paths = []
-        for var in path_vars:
-            value = var.get().strip()
-            if not value:
-                messagebox.showerror("错误", "所有路径不能为空")
-                return
-            paths.append(value)
-        # 检查数字
-        floats = []
-        for entry, var in zip(num_entries, num_vars):
-            value = var.get().strip()
-            try:
-                num = float(value)
-                floats.append(num)
-            except Exception:
-                messagebox.showerror("错误", f"请输入有效数字：{entry['label_text']}")
-                return
-            
-        # 返回数据
-        nonlocal result
-        result = {
-            "plate_path": paths[0],
-            "conc_path": paths[1],
-            "conc": floats[0],
-            "volume": floats[1],
-            "parent": root,
-        }
-        # root.destroy()
-        root.withdraw()
-        root.quit()
-
-    def on_cancel():
-        root.destroy()
-        return
-
-    root = tk.Toplevel()
-    root.title("输入参数")
-    root.resizable(False, False)
-
-    # 设置为顶层窗口并获得焦点
-    root.transient(root.master)
-    root.grab_set()
-
-    frm = tk.Frame(root)
-    frm.pack(padx=16, pady=16)
-
-    # 路径输入
-    path_labels = ["样本布局", "返测浓度"]
-    path_vars = [tk.StringVar() for _ in range(2)]
-    for i, label in enumerate(path_labels):
-        row = tk.Frame(frm)
-        row.pack(fill='x', pady=3)
-        tk.Label(row, text=label, width=13, anchor='e').pack(side='left')
-        entry = tk.Entry(row, textvariable=path_vars[i], width=40)
-        entry.pack(side='left', padx=5)
-        btn = tk.Button(row, text="选择", command=lambda v=path_vars[i]: choose_file(v))
-        btn.pack(side='left')
-
-    # 数值输入
-    num_labels = [
-        ("目标浓度(ng/ul)", ""),
-        ("加水体积(ul)", ""),
-    ]
-    num_vars = [tk.StringVar(value=str(val)) for label, val in num_labels]
-    num_entries = []
-    for i, (label, val) in enumerate(num_labels):
-        row = tk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        lbl = tk.Label(row, text=label, width=13, anchor='e')
-        lbl.pack(side='left')
-        entry = tk.Entry(row, textvariable=num_vars[i], width=15, justify='right')
-        entry.icursor('end')
-        entry.pack(side='left')
-        entry.label_text = label
-        num_entries.append(entry)
-        # 只允许数字和小数点
-        def only_float_input(text):
-            if text == "":
-                return True
-            try:
-                float(text)
-                return True
-            except:
-                return False
-        entry.config(validate="key",
-                     validatecommand=(root.register(only_float_input), "%P"))
-
-    # 按钮
-    btns = tk.Frame(frm)
-    btns.pack(pady=(16,0))
-    tk.Button(btns, text="确定", command=on_ok, width=12).pack(side='left', padx=8)
-    tk.Button(btns, text="取消", command=on_cancel, width=12).pack(side='left', padx=8)
-
-    root.mainloop()
-    return result
-
+    ui = UIContext.from_env()
+    return {
+        "plate_path": ui.require_input("plate_file"),
+        "conc_path": ui.require_input("conc_file"),
+        "conc": float(ui.optional_param("target_conc", 8)),
+        "volume": float(ui.optional_param("volume", 50)),
+        "parent": None,
+    }
 
 def main():
 
@@ -336,7 +232,8 @@ def main():
 
     output_worklist(plate_path, output_frame, bi_dict)
 
-    parent.destroy()
+    if parent:
+        parent.destroy()
 
 
     # 构建弹窗统计信息
@@ -344,7 +241,7 @@ def main():
         f"处理完成！\n\n"
     )
 
-    messagebox.showinfo("完成", result_msg)
+    print(result_msg)
 
     return
 

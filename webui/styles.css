@@ -1,0 +1,279 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f7f7f5;
+  color: #1b1f2a;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  border: 1px solid #e7e6e0;
+}
+
+.header__eyebrow {
+  color: #6b7a99;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.header__subtitle {
+  margin: 6px 0 0;
+  color: #5b6b8b;
+}
+
+.header__badge {
+  background: #1b1f2a;
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.banner {
+  margin: 18px 0;
+  background: #eef4ff;
+  border: 1px solid #c8dcff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  color: #2b4aa5;
+}
+
+.panel {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #e7e6e0;
+}
+
+.panel__header h2 {
+  margin: 0 0 6px;
+}
+
+.panel__header p {
+  margin: 0;
+  color: #6b7a99;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.layout__left,
+.layout__right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.batch-table {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.batch-table__row {
+  display: grid;
+  grid-template-columns: 120px 120px 80px 80px;
+  align-items: center;
+  background: #faf9f4;
+  padding: 12px 14px;
+  border-radius: 12px;
+  gap: 12px;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.batch-table__row--clickable {
+  cursor: pointer;
+}
+
+.batch-table__row--clickable:hover {
+  border-color: #d8d6cc;
+}
+
+.batch-table__row--clickable.is-active {
+  border-color: #1b1f2a;
+  background: #ffffff;
+}
+
+.batch-table__row--head {
+  background: transparent;
+  padding: 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7a99;
+}
+
+.batch-table__id {
+  font-weight: 600;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #edece8;
+  color: #6b7a99;
+}
+
+.status-pill--running {
+  background: #efe8d7;
+  color: #7d5d2b;
+}
+
+.status-pill--todo {
+  background: #edece8;
+  color: #6b7a99;
+}
+
+.gantt {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.gantt-row__label {
+  font-size: 13px;
+  color: #2c3958;
+}
+
+.gantt-row__bar {
+  position: relative;
+  height: 12px;
+  background: #f1f0ea;
+  border-radius: 999px;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 2px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1b1f2a;
+}
+
+.gantt-bar--running {
+  background: #7d5d2b;
+}
+
+.gantt-bar--done {
+  background: #1b1f2a;
+}
+
+.empty-state {
+  padding: 16px;
+  background: #faf9f4;
+  border-radius: 12px;
+  color: #6b7a99;
+}
+
+.canvas-wrapper {
+  background: #faf9f4;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px dashed #e3e1da;
+}
+
+.incremental {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #2c3958;
+}
+
+.field input {
+  border: 1px solid #d7d6cf;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+.field em {
+  font-size: 11px;
+  color: #6b7a99;
+  font-style: normal;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #2c3958;
+}
+
+.action-card__cta {
+  margin-top: 4px;
+  background: #1b1f2a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-card__cta:disabled {
+  background: #b8b6ad;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-table__row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .gantt-row {
+    grid-template-columns: 1fr;
+  }
+}

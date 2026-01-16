@@ -3,8 +3,7 @@ from core.read_config_path import get_app_dir, get_meipass_dir, find_config_path
 
 import pandas as pd
 import re
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from core.ui_inputs import UIContext
 import os
 from typing import Tuple
 import configparser
@@ -22,7 +21,7 @@ def std_curve(c: float, b: float, a: float, scale: float, input_value: float) ->
     # 计算标准曲线转换
     denominator = b * scale
     if denominator == 0:
-        messagebox.showerror("错误", "b和scale不能为0")
+        raise ValueError("b和scale不能为0")
         return
     factor = a / denominator
     
@@ -119,144 +118,42 @@ def calculate_and_export_conc(plate_path: str, asc_paths: dict, c:float, b:float
 
 
 def get_user_inputs():
+    ui = UIContext.from_env()
+    defaults = load_defaults()
 
-    config_path = "config/std_curve_defaults.ini"
-    # 1. 先加载历史默认值
-    defaults = load_defaults(config_path)
+    plate_path = ui.require_input("plate_file")
+    asc_files = ui.list_inputs("asc_files")
 
-    # 回传结果
-    result = {}
+    xl = pd.ExcelFile(plate_path)
+    sheets = xl.sheet_names
+    if asc_files and len(asc_files) != len(sheets):
+        raise ValueError("asc文件数量需与plate的sheet数量一致")
 
-    def choose_file(var):
-        path = filedialog.askopenfilename()
-        if path:
-            var.set(path)
+    asc_paths = {}
+    for idx, sheet in enumerate(sheets):
+        if asc_files:
+            asc_paths[sheet] = asc_files[idx]
+        else:
+            raise ValueError(f"未提供{sheet}的asc文件")
 
-    def on_ok():
-        # 检查路径
-        plate_path = plate_var.get().strip()
-        if not plate_path:
-            messagebox.showerror("错误", "请先选择ELI plate布局文件")
-            return
-        
-        # 读sheet名
-        try:
-            xl = pd.ExcelFile(plate_path)
-            sheets = xl.sheet_names
-        except Exception as e:
-            messagebox.showerror("错误", f"无法读取plate xlsx：{e}")
-            return
-        
-         # 依次为每个sheet选择asc
-        asc_paths = {}
-        for sheet in sheets:
-            msg = f"请选择与sheet “{sheet}” 对应的吸光度.asc文件"
-            # messagebox.showinfo("请选择", msg)
-            path = filedialog.askopenfilename(title=msg, filetypes=[("ASC files", "*.asc"), ("All files", "*.*")])
-            if not path:
-                messagebox.showerror("错误", f"未选择{sheet}的asc文件")
-                return
-            asc_paths[sheet] = path
-        
-        # 检查数字
-        floats = []
-        for entry, var in zip(num_entries, num_vars):
-            value = var.get().strip()
-            try:
-                num = float(value)
-                floats.append(num)
-            except Exception:
-                messagebox.showerror("错误", f"请输入有效数字：{entry['label_text']}")
-                return
-            
-        # 保存新默认值
-        save_defaults(*floats, config_path=config_path)
+    a = float(ui.optional_param("a", defaults["a"]))
+    b = float(ui.optional_param("b", defaults["b"]))
+    c = float(ui.optional_param("c", defaults["c"]))
+    scale = float(ui.optional_param("scale", defaults["scale"]))
+    m = float(ui.optional_param("m", defaults["m"]))
 
-        # 返回数据
-        nonlocal result
-        result = {
-            "plate_path": plate_path,
-            "asc_paths": asc_paths,
-            "a": floats[0],
-            "b": floats[1],
-            "c": floats[2],
-            "scale": floats[3],
-            "m": floats[4],
-            "parent": root,
-        }
-        # root.destroy()
-        root.withdraw()
-        root.quit()
-    
-    def on_cancel():
-        root.destroy()
-        return
+    save_defaults(a, b, c, scale, m)
 
-    root = tk.Toplevel()
-    root.title("输入参数")
-    root.resizable(False, False)
-
-    # 设置为顶层窗口并获得焦点
-    root.transient(root.master)
-    root.grab_set()
-
-    frm = tk.Frame(root)
-    frm.pack(padx=16, pady=16)
-
-    # 1. plate布局文件选择
-    plate_var = tk.StringVar()
-    row = tk.Frame(frm)
-    row.pack(fill='x', pady=3)
-    tk.Label(row, text="ELI plate布局xlsx", width=15, anchor='e').pack(side='left')
-    entry = tk.Entry(row, textvariable=plate_var, width=40)
-    entry.pack(side='left', padx=5)
-    tk.Button(row, text="选择", command=lambda: choose_file(plate_var)).pack(side='left')
-
-    # 说明
-    tk.Label(frm, text="标准曲线计算公式：浓度=标曲系数 * (读数 - 标曲偏置) / 标曲分母 / 缩放因子",
-             fg="blue", anchor='w').pack(fill='x', pady=(16,3))
-
-    # 数值输入
-    num_labels = [
-        ("标曲系数", defaults['a']),
-        ("标曲分母", defaults['b']),
-        ("标曲偏置", defaults['c']),
-        ("缩放因子", defaults['scale']),
-        ("转染量", defaults['m'])
-    ]
-    num_vars = [tk.StringVar(value=str(val)) for label, val in num_labels]
-    num_entries = []
-    for i, (label, val) in enumerate(num_labels):
-        row = tk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        lbl = tk.Label(row, text=label, width=13, anchor='e')
-        lbl.pack(side='left')
-        entry = tk.Entry(row, textvariable=num_vars[i], width=15, justify='right')
-        entry.icursor('end')
-        entry.pack(side='left')
-        entry.label_text = label
-        num_entries.append(entry)
-        # 只允许数字和小数点
-        def only_float_input(text):
-            if text == "":
-                return True
-            try:
-                float(text)
-                return True
-            except:
-                return False
-        entry.config(validate="key",
-                     validatecommand=(root.register(only_float_input), "%P"))
-
-    # 按钮
-    btns = tk.Frame(frm)
-    btns.pack(pady=(16,0))
-    tk.Button(btns, text="确定", command=on_ok, width=12).pack(side='left', padx=8)
-    tk.Button(btns, text="取消", command=on_cancel, width=12).pack(side='left', padx=8)
-
-    root.mainloop()
-    return result
-
+    return {
+        "plate_path": plate_path,
+        "asc_paths": asc_paths,
+        "a": a,
+        "b": b,
+        "c": c,
+        "scale": scale,
+        "m": m,
+        "parent": None,
+    }
 
 def load_defaults(config_path: str | None = None):
     if config_path is None:
@@ -324,9 +221,10 @@ def main():
         f"质粒浓度计算结果: conc.xlsx \n"
     )
 
-    messagebox.showinfo("完成", result_msg, parent=parent)
+    print(result_msg)
 
-    parent.destroy()
+    if parent:
+        parent.destroy()
 
     return
 
