@@ -5,7 +5,8 @@ from typing import Optional
 from temporalio import activity
 
 from app.db.session import SessionLocal
-from app.models import Batch, WorkflowNodeVersion, WorkflowTemplateStep
+from app.models import Artifact, Batch, LineageEdge, WorkflowNodeVersion, WorkflowTemplateStep
+from app import statuses
 
 
 def _mock_artifact_path(batch_id: uuid.UUID, step_index: int) -> str:
@@ -49,6 +50,7 @@ def get_idle_versions(batch_id: uuid.UUID) -> list[dict]:
                     WorkflowNodeVersion.status == "idle",
                 )
                 .order_by(
+                    WorkflowNodeVersion.version.desc(),
                     WorkflowNodeVersion.created_at.desc(),
                     WorkflowNodeVersion.updated_at.desc(),
                     WorkflowNodeVersion.id.desc(),
@@ -84,6 +86,106 @@ def execute_step(batch_id: uuid.UUID, step_index: int, node_version_id: uuid.UUI
         node_version.status = "completed"
         node_version.artifact_uri = artifact_uri
         session.add(node_version)
+
+        # create artifact and lineage to artifact
+        artifact = None
+        if artifact_uri:
+            artifact = Artifact(
+                node_version_id=node_version.id,
+                uri=artifact_uri,
+                content_type="text/plain",
+            )
+            session.add(artifact)
+            session.flush()
+            session.add(
+                LineageEdge(
+                    source_node_version_id=node_version.id,
+                    target_artifact_id=artifact.id,
+                    relation="artifact",
+                )
+            )
+
         session.commit()
 
     return artifact_uri or ""
+
+
+@activity.defn(name="create_node_version")
+def create_node_version(
+    batch_id: uuid.UUID,
+    step_index: int,
+    parent_node_version_id: uuid.UUID | None = None,
+    relation: str | None = None,
+) -> str:
+    with SessionLocal() as session:
+        previous = None
+        if parent_node_version_id:
+            previous = session.get(WorkflowNodeVersion, parent_node_version_id)
+        if previous is None:
+            previous = (
+                session.query(WorkflowNodeVersion)
+                .filter(
+                    WorkflowNodeVersion.batch_id == batch_id,
+                    WorkflowNodeVersion.step_index == step_index,
+                )
+                .order_by(
+                    WorkflowNodeVersion.version.desc(),
+                    WorkflowNodeVersion.created_at.desc(),
+                    WorkflowNodeVersion.updated_at.desc(),
+                    WorkflowNodeVersion.id.desc(),
+                )
+                .first()
+            )
+        new_version = ((previous.version if previous else 0) + 1)
+        node_version = WorkflowNodeVersion(
+            batch_id=batch_id,
+            template_version="v1",
+            step_index=step_index,
+            version=new_version,
+            status=statuses.IDLE,
+        )
+        session.add(node_version)
+        session.flush()
+
+        if previous is not None and relation:
+            session.add(
+                LineageEdge(
+                    source_node_version_id=previous.id,
+                    target_node_version_id=node_version.id,
+                    relation=relation,
+                )
+            )
+        session.commit()
+        return str(node_version.id)
+
+
+@activity.defn(name="get_template_step_indices")
+def get_template_step_indices() -> list[int]:
+    with SessionLocal() as session:
+        return [
+            row[0]
+            for row in session.query(WorkflowTemplateStep.step_index)
+            .filter(WorkflowTemplateStep.template_version == "v1")
+            .order_by(WorkflowTemplateStep.step_index)
+            .all()
+        ]
+
+
+@activity.defn(name="get_latest_version_for_step")
+def get_latest_version_for_step(batch_id: uuid.UUID, step_index: int) -> str | None:
+    with SessionLocal() as session:
+        latest = (
+            session.query(WorkflowNodeVersion)
+            .filter(
+                WorkflowNodeVersion.batch_id == batch_id,
+                WorkflowNodeVersion.step_index == step_index,
+            )
+            .order_by(
+                WorkflowNodeVersion.version.desc(),
+                WorkflowNodeVersion.created_at.desc(),
+                WorkflowNodeVersion.updated_at.desc(),
+                WorkflowNodeVersion.id.desc(),
+            )
+            .first()
+        )
+        return str(latest.id) if latest else None

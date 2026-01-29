@@ -23,6 +23,7 @@
 - construct
 - construct_chain
 - clone
+- plasmid
 - expression_sample
 - recombinant_antibody
 - assay_result

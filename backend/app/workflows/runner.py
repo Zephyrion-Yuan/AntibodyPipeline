@@ -22,14 +22,35 @@ async def get_temporal_client() -> Client:
     return await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
 
 
-async def start_batch_workflow(batch_id: uuid.UUID) -> str:
+async def start_batch_workflow(batch_id: uuid.UUID, wait_for_result: bool = True) -> str:
     client = await get_temporal_client()
     handle = await client.start_workflow(
         BatchWorkflow.run,
-        str(batch_id),
         id=f"batch-workflow-{batch_id}",
         task_queue=settings.temporal_task_queue,
+        args=[str(batch_id), False],
     )
-    # Wait for completion so API stays simple and tests can assert side effects
-    await handle.result()
+    if wait_for_result:
+        await handle.result()
+    return handle.id
+
+
+async def send_rollback_signal(batch_id: uuid.UUID, from_step_index: int) -> str:
+    client = await get_temporal_client()
+    workflow_id = f"batch-workflow-{batch_id}"
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        await handle.signal("rollback", from_step_index)
+        return handle.id
+    except Exception:
+        # Start workflow if not found, then signal
+        handle = await client.start_workflow(
+            BatchWorkflow.run,
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
+            args=[str(batch_id), True],
+        )
+        await handle.signal("rollback", from_step_index)
+        return handle.id
+    await handle.signal("rollback", from_step_index)
     return handle.id

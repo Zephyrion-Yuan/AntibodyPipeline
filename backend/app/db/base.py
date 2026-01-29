@@ -12,11 +12,15 @@ class Base(DeclarativeBase):
 # Import models here for Alembic to discover them
 try:
     from app.models.batch import Batch  # noqa: F401  # pylint: disable=unused-import
+    from app.models.artifact import Artifact  # noqa: F401
+    from app.models.lineage_edge import LineageEdge  # noqa: F401
     from app.models.workflow_node_version import WorkflowNodeVersion  # noqa: F401
     from app.models.workflow_template_step import (  # noqa: F401  # pylint: disable=unused-import
         WorkflowTemplateStep,
     )
 except Exception:  # pragma: no cover - defensive for initial bootstrap
     Batch = None
+    Artifact = None
+    LineageEdge = None
     WorkflowNodeVersion = None
     WorkflowTemplateStep = None

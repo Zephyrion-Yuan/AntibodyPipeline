@@ -11,35 +11,27 @@
 ## Core Entities
 
 ### Chain
-- Heavy / Light / scFv sequences
+- Heavy / Light / scFv sequence information only
 
 ### Construct
-- Combination of one or more chains
-- Many‑to‑many with Chain
+- DNA construct design combining one or more Chains
+- Includes backbone and regulatory elements as attributes
+- Does NOT represent a physical plasmid
 
 ### Clone
-- Physical instantiation of a Construct
+- A physical plasmid instance derived from a Construct
+- Represents a single clone or plasmid preparation
+- One Construct → many Clones
 
 ### Expression Sample
-- One expression/transfection setup
-- Many‑to‑many with Clone
+- One expression or transfection experiment setup
+- Many-to-many with Clone
 
-### Recombinant Antibody (Required)
-- Purified product of expression
-- Direct input to all functional assays
+### Recombinant Antibody
+- Purified antibody produced from an Expression Sample
+- Stable physical entity
+- Direct input to downstream functional assays
 
 ### Assay Result
-- ELISA / SPR / BLI / Neutralization etc.
-- References Recombinant Antibody
-
-## Plate / Well Model
-
-- Plate: physical plate
-- Well: fixed coordinate (A1, B2…)
-- SampleWell: occupancy event at a step/time
-- Spatial tracking is **not** expressed via workflow edges
-
-## Lineage
-
-- All outputs record derivation relationships
-- Rollback creates new lineage, never deletes history
+- Functional assay outcome (ELISA / SPR / BLI / etc.)
+- References one or more Recombinant Antibodies
