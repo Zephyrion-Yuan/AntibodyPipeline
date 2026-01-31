@@ -30,6 +30,10 @@ def create_test_database() -> Generator[None, None, None]:
 
 @pytest.fixture()
 def db_session() -> Generator[Session, None, None]:
+    # isolate each test
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    _seed_template_steps()
     db = SessionLocal()
     try:
         yield db

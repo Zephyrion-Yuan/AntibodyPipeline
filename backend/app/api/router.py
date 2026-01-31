@@ -6,9 +6,10 @@ from sqlalchemy import func
 
 from app.db.session import get_db
 from app import statuses
-from app.models import Batch, WorkflowTemplateStep, WorkflowNodeVersion, LineageEdge
+from app.models import Batch, WorkflowTemplateStep, WorkflowNodeVersion, LineageEdge, Artifact, Chain
 from app.schemas.params import UpdateParamsRequest, WorkflowNodeVersionResponse, RollbackRequest
 from app.schemas.version_list import NodeVersionListResponse, NodeVersionListItem, LineageRef
+from app.schemas.lineage import LineageResponse, LineageEdgeOut, EntityType
 from app.workflows.runner import start_batch_workflow, send_rollback_signal
 
 api_router = APIRouter(prefix="/api")
@@ -146,6 +147,72 @@ def list_step_versions(
             )
             for v in versions
         ],
+    )
+
+
+@api_router.get("/lineage/{entity_type}/{entity_id}", response_model=LineageResponse)
+def get_lineage(
+    entity_type: EntityType,
+    entity_id: str,
+    depth: int = 5,
+    db: Session = Depends(get_db),
+):
+    if depth <= 0:
+        raise HTTPException(status_code=400, detail="Depth must be positive")
+
+    def resolve_node_version_id(et: EntityType, eid: str) -> uuid.UUID:
+        if et == "node_version":
+            node = db.get(WorkflowNodeVersion, uuid.UUID(eid))
+            if not node:
+                raise HTTPException(status_code=404, detail="Node version not found")
+            return node.id
+        if et == "artifact":
+            art = db.get(Artifact, uuid.UUID(eid))
+            if not art:
+                raise HTTPException(status_code=404, detail="Artifact not found")
+            return art.node_version_id
+        if et == "chain":
+            chain = db.get(Chain, uuid.UUID(eid))
+            if not chain:
+                raise HTTPException(status_code=404, detail="Chain not found")
+            return chain.node_version_id
+        raise HTTPException(status_code=400, detail="Unsupported entity type")
+
+    start_node_id = resolve_node_version_id(entity_type, entity_id)
+
+    visited = set()
+    edges_out: list[LineageEdgeOut] = []
+
+    frontier = [(start_node_id, 0)]
+    while frontier:
+        current_id, d = frontier.pop(0)
+        if d >= depth:
+            continue
+        upstream_edges = (
+            db.query(LineageEdge)
+            .filter(LineageEdge.target_node_version_id == current_id)
+            .all()
+        )
+        for edge in upstream_edges:
+            edges_out.append(
+                LineageEdgeOut(
+                    id=str(edge.id),
+                    relation=edge.relation,
+                    source_node_version_id=str(edge.source_node_version_id),
+                    target_type="node_version",
+                    target_id=str(current_id),
+                    depth=d + 1,
+                )
+            )
+            if edge.source_node_version_id not in visited:
+                visited.add(edge.source_node_version_id)
+                frontier.append((edge.source_node_version_id, d + 1))
+
+    return LineageResponse(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        depth_limit=depth,
+        edges=edges_out,
     )
 
 

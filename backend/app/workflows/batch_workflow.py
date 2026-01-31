@@ -65,7 +65,7 @@ class BatchWorkflow:
                 )
                 await workflow.execute_activity(
                     "execute_step",
-                    args=[batch_uuid, step_index, node_version_id],
+                    args=[batch_uuid, step_index, node_version_id, parent_id],
                     schedule_to_close_timeout=timedelta(seconds=30),
                 )
 

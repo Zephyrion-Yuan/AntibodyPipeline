@@ -26,6 +26,9 @@ class WorkflowNodeVersion(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=statuses.IDLE
     )
+    input_construct_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("construct.id", ondelete="SET NULL"), nullable=True
+    )
     params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     artifact_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

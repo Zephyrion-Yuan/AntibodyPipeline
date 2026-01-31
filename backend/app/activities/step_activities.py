@@ -5,7 +5,16 @@ from typing import Optional
 from temporalio import activity
 
 from app.db.session import SessionLocal
-from app.models import Artifact, Batch, LineageEdge, WorkflowNodeVersion, WorkflowTemplateStep
+from app.models import (
+    Artifact,
+    Batch,
+    Chain,
+    Construct,
+    ConstructChain,
+    LineageEdge,
+    WorkflowNodeVersion,
+    WorkflowTemplateStep,
+)
 from app import statuses
 
 
@@ -65,7 +74,12 @@ def get_idle_versions(batch_id: uuid.UUID) -> list[dict]:
 
 
 @activity.defn(name="execute_step")
-def execute_step(batch_id: uuid.UUID, step_index: int, node_version_id: uuid.UUID | str) -> str:
+def execute_step(
+    batch_id: uuid.UUID,
+    step_index: int,
+    node_version_id: uuid.UUID | str,
+    parent_node_version_id: uuid.UUID | str | None = None,
+) -> str:
     """Mock computation for a template step; updates existing node version."""
     artifact_uri: Optional[str] = None
     if step_index in (1, 2, 3):
@@ -78,6 +92,10 @@ def execute_step(batch_id: uuid.UUID, step_index: int, node_version_id: uuid.UUI
             raise ValueError(f"Node version {node_version_id} not found")
         if node_version.status != "idle":
             return node_version.artifact_uri or ""
+
+        parent_version = None
+        if parent_node_version_id:
+            parent_version = session.get(WorkflowNodeVersion, uuid.UUID(str(parent_node_version_id)))
 
         node_version.status = "running"
         session.add(node_version)
@@ -104,6 +122,83 @@ def execute_step(batch_id: uuid.UUID, step_index: int, node_version_id: uuid.UUI
                     relation="artifact",
                 )
             )
+
+        # Chain production: step_index 1 assumed to create chain
+        if step_index == 1:
+            chain = Chain(
+                node_version_id=node_version.id,
+                name=f"chain-{node_version.version}",
+                sequence=(node_version.params or {}).get("sequence"),
+            )
+            session.add(chain)
+            session.flush()
+            if parent_version and parent_version.params != node_version.params:
+                session.add(
+                    LineageEdge(
+                        source_node_version_id=parent_version.id,
+                        target_node_version_id=node_version.id,
+                        relation="derive",
+                    )
+                )
+
+        # Construct production: step_index 2 combines existing chains
+        if step_index == 2:
+            chains = (
+                session.query(Chain)
+                .join(WorkflowNodeVersion, Chain.node_version_id == WorkflowNodeVersion.id)
+                .filter(WorkflowNodeVersion.batch_id == batch_id)
+                .all()
+            )
+            construct = Construct(
+                node_version_id=node_version.id,
+                name=f"construct-{node_version.version}",
+            )
+            session.add(construct)
+            session.flush()
+            for chain in chains:
+                session.add(
+                    ConstructChain(construct_id=construct.id, chain_id=chain.id)
+                )
+                session.add(
+                    LineageEdge(
+                        source_node_version_id=chain.node_version_id,
+                        target_construct_id=construct.id,
+                        relation="derive",
+                    )
+                )
+            session.add(
+                LineageEdge(
+                    source_node_version_id=node_version.id,
+                    target_construct_id=construct.id,
+                    relation="construct",
+                )
+            )
+
+        # Step 3 consumes a construct; record the exact construct used
+        if step_index == 3:
+            if node_version.input_construct_id:
+                construct = session.get(Construct, node_version.input_construct_id)
+            else:
+                construct = (
+                    session.query(Construct)
+                    .join(WorkflowNodeVersion, Construct.node_version_id == WorkflowNodeVersion.id)
+                    .filter(
+                        WorkflowNodeVersion.batch_id == batch_id,
+                        WorkflowNodeVersion.step_index == 2,
+                    )
+                    .order_by(
+                        WorkflowNodeVersion.version.desc(),
+                        WorkflowNodeVersion.created_at.desc(),
+                        Construct.created_at.desc(),
+                        Construct.id.desc(),
+                    )
+                    .first()
+                )
+                if construct:
+                    node_version.input_construct_id = construct.id
+                    session.add(node_version)
+            if construct is None:
+                raise ValueError("No construct available for step 3 consumption")
 
         session.commit()
 

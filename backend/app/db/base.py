@@ -13,6 +13,9 @@ class Base(DeclarativeBase):
 try:
     from app.models.batch import Batch  # noqa: F401  # pylint: disable=unused-import
     from app.models.artifact import Artifact  # noqa: F401
+    from app.models.chain import Chain  # noqa: F401
+    from app.models.construct import Construct  # noqa: F401
+    from app.models.construct_chain import ConstructChain  # noqa: F401
     from app.models.lineage_edge import LineageEdge  # noqa: F401
     from app.models.workflow_node_version import WorkflowNodeVersion  # noqa: F401
     from app.models.workflow_template_step import (  # noqa: F401  # pylint: disable=unused-import
@@ -21,6 +24,9 @@ try:
 except Exception:  # pragma: no cover - defensive for initial bootstrap
     Batch = None
     Artifact = None
+    Chain = None
+    Construct = None
+    ConstructChain = None
     LineageEdge = None
     WorkflowNodeVersion = None
     WorkflowTemplateStep = None
