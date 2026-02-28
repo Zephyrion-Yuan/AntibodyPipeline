@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from app.db.session import get_db
 from app import statuses
-from app.models import Batch, WorkflowTemplateStep, WorkflowNodeVersion, LineageEdge, Artifact, Chain
+from app.models import Batch, WorkflowTemplateStep, WorkflowNodeVersion, LineageEdge, Artifact, Chain, Construct
 from app.schemas.params import UpdateParamsRequest, WorkflowNodeVersionResponse, RollbackRequest
 from app.schemas.version_list import NodeVersionListResponse, NodeVersionListItem, LineageRef
 from app.schemas.lineage import LineageResponse, LineageEdgeOut, EntityType
@@ -63,6 +63,8 @@ async def run_batch(batch_id: uuid.UUID, db: Session = Depends(get_db)):
     batch = db.get(Batch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.status == statuses.RUNNING:
+        raise HTTPException(status_code=409, detail="Batch is already running")
 
     run_id = await start_batch_workflow(batch_id)
     # Refresh batch status after workflow completion
@@ -79,6 +81,19 @@ async def rollback_batch(
     batch = db.get(Batch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.status != statuses.COMPLETED:
+        raise HTTPException(status_code=409, detail="Batch must be completed before rollback")
+
+    template_step = (
+        db.query(WorkflowTemplateStep)
+        .filter(
+            WorkflowTemplateStep.template_version == "v1",
+            WorkflowTemplateStep.step_index == payload.from_step_index,
+        )
+        .first()
+    )
+    if template_step is None:
+        raise HTTPException(status_code=404, detail="Step index not found in template")
 
     await send_rollback_signal(batch_id, payload.from_step_index)
     return {
@@ -176,6 +191,11 @@ def get_lineage(
             if not chain:
                 raise HTTPException(status_code=404, detail="Chain not found")
             return chain.node_version_id
+        if et == "construct":
+            construct = db.get(Construct, uuid.UUID(eid))
+            if not construct:
+                raise HTTPException(status_code=404, detail="Construct not found")
+            return construct.node_version_id
         raise HTTPException(status_code=400, detail="Unsupported entity type")
 
     start_node_id = resolve_node_version_id(entity_type, entity_id)
@@ -201,6 +221,28 @@ def get_lineage(
                     source_node_version_id=str(edge.source_node_version_id),
                     target_type="node_version",
                     target_id=str(current_id),
+                    depth=d + 1,
+                )
+            )
+            if edge.source_node_version_id not in visited:
+                visited.add(edge.source_node_version_id)
+                frontier.append((edge.source_node_version_id, d + 1))
+
+        # Also follow edges targeting constructs owned by the current node version
+        construct_edges = (
+            db.query(LineageEdge)
+            .join(Construct, LineageEdge.target_construct_id == Construct.id)
+            .filter(Construct.node_version_id == current_id)
+            .all()
+        )
+        for edge in construct_edges:
+            edges_out.append(
+                LineageEdgeOut(
+                    id=str(edge.id),
+                    relation=edge.relation,
+                    source_node_version_id=str(edge.source_node_version_id),
+                    target_type="construct",
+                    target_id=str(edge.target_construct_id),
                     depth=d + 1,
                 )
             )

@@ -26,7 +26,7 @@ from app.workflows.runner import set_client_override
 async def test_rollback_creates_new_versions(db_session):
     settings = get_settings()
 
-    batch = Batch(name="Rollback Batch")
+    batch = Batch(name="Rollback Batch", status=statuses.COMPLETED)
     db_session.add(batch)
     db_session.commit()
     db_session.refresh(batch)

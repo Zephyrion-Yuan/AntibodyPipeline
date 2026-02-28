@@ -1,14 +1,14 @@
 from typing import List, Literal
 from pydantic import BaseModel
 
-EntityType = Literal["node_version", "artifact", "chain"]
+EntityType = Literal["node_version", "artifact", "chain", "construct"]
 
 
 class LineageEdgeOut(BaseModel):
     id: str
     relation: str
     source_node_version_id: str
-    target_type: Literal["node_version", "artifact"]
+    target_type: Literal["node_version", "artifact", "construct"]
     target_id: str
     depth: int
 

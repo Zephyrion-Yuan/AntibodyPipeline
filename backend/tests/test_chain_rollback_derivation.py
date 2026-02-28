@@ -25,7 +25,7 @@ from app.workflows.runner import set_client_override
 async def test_chain_rollback_creates_new_chain_and_lineage(db_session):
     settings = get_settings()
 
-    batch = Batch(name="Chain Rollback")
+    batch = Batch(name="Chain Rollback", status=statuses.COMPLETED)
     db_session.add(batch)
     db_session.commit()
     db_session.refresh(batch)

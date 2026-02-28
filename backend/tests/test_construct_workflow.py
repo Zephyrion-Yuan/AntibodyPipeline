@@ -52,6 +52,10 @@ async def test_construct_created_and_preserved_on_rollback(db_session):
     execute_step(batch.id, 1, step1.id)  # creates chain
     execute_step(batch.id, 2, step2.id)  # creates construct
 
+    batch.status = statuses.COMPLETED
+    db_session.add(batch)
+    db_session.commit()
+
     env = await WorkflowEnvironment.start_time_skipping()
     try:
         async with env:

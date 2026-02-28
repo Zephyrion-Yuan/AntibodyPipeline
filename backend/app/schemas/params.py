@@ -17,6 +17,3 @@ class WorkflowNodeVersionResponse(BaseModel):
 
 class RollbackRequest(BaseModel):
     from_step_index: int
-
-class RollbackRequest(BaseModel):
-    from_step_index: int
